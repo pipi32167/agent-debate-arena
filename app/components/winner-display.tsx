@@ -1,6 +1,7 @@
 'use client';
 
-import { Tournament } from '@/types';
+import { useState } from 'react';
+import { Tournament, DebateRound } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -22,9 +23,10 @@ import {
 interface WinnerDisplayProps {
   tournament: Tournament;
   onRestart: () => void;
+  onViewDetail?: (round: DebateRound) => void;
 }
 
-export function WinnerDisplay({ tournament, onRestart }: WinnerDisplayProps) {
+export function WinnerDisplay({ tournament, onRestart, onViewDetail }: WinnerDisplayProps) {
   if (!tournament.champion) return null;
 
   const champion = tournament.champion;
@@ -110,7 +112,8 @@ export function WinnerDisplay({ tournament, onRestart }: WinnerDisplayProps) {
                 .map((round, index) => (
                   <div 
                     key={round.id}
-                    className="flex items-center gap-4 p-3 rounded-lg bg-muted/50"
+                    className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => onViewDetail?.(round)}
                   >
                     <div className="flex items-center justify-center w-8 h-8 rounded-full bg-yellow-500/20 text-yellow-600 font-bold text-sm">
                       {index + 1}

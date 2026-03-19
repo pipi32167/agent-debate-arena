@@ -31,6 +31,7 @@ model Tournament {
   currentRoundIndex Int @default(0)
   currentMatchIndex Int @default(0)
   winners     String   // JSON: AIAgent[]
+  byeParticipant String? // JSON: AIAgent | null
   champion    String?  // JSON: AIAgent | null
   status      String   // 'configuring' | 'ongoing' | 'completed'
   createdAt   DateTime @default(now())

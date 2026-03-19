@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
         participants: JSON.parse(tournament.participants),
         rounds: JSON.parse(tournament.rounds),
         winners: JSON.parse(tournament.winners),
+        byeParticipant: tournament.byeParticipant ? JSON.parse(tournament.byeParticipant) : null,
         champion: tournament.champion ? JSON.parse(tournament.champion) : null,
         createdAt: new Date(tournament.createdAt).getTime(),
       }
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
       currentRoundIndex: tournament.currentRoundIndex || 0,
       currentMatchIndex: tournament.currentMatchIndex || 0,
       winners: JSON.stringify(tournament.winners || []),
+      byeParticipant: tournament.byeParticipant ? JSON.stringify(tournament.byeParticipant) : null,
       champion: tournament.champion ? JSON.stringify(tournament.champion) : null,
       status: tournament.status,
       maxDebateRounds: tournament.maxDebateRounds || 3,
@@ -70,8 +72,16 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const prisma = createPrisma();
   try {
-    const { id } = await req.json();
-    await prisma.tournament.delete({ where: { id } });
+    const body = await req.json().catch(() => ({}));
+    const { id } = body;
+    
+    if (id) {
+      await prisma.tournament.delete({ where: { id } });
+    } else {
+      await prisma.tournament.deleteMany({
+        where: { status: { in: ['configuring', 'ongoing'] } }
+      });
+    }
     return Response.json({ success: true });
   } catch (error) {
     console.error('DELETE tournament error:', error);

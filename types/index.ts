@@ -46,6 +46,13 @@ export interface Vote {
   reason: string;
 }
 
+export interface StanceChoice {
+  agentId: string;
+  agentName: string;
+  stance: 'for' | 'against';
+  reason: string;
+}
+
 // 辩论轮次
 export interface DebateRound {
   id: string;
@@ -72,10 +79,12 @@ export interface Tournament {
   currentRoundIndex: number;
   currentMatchIndex: number;
   winners: AIAgent[]; // 当前轮次的胜者
+  byeParticipant: AIAgent | null; // 当前轮次轮空的参与者
   champion: AIAgent | null;
-  status: 'configuring' | 'ongoing' | 'completed';
+  status: 'configuring' | 'choosing_stance' | 'ongoing' | 'completed';
   createdAt: number;
   maxDebateRounds: number; // 每场辩论的最大回合数
+  stanceChoices?: StanceChoice[];
 }
 
 // 预设 AI Persona
