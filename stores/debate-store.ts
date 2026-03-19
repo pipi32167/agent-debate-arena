@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AIAgent, DebateRound, Tournament, Vote, DebateMessage, ProviderConfig } from '@/types';
+import { AIAgent, DebateRound, Tournament, Vote, DebateMessage, ProviderConfig, StanceChoice } from '@/types';
 
 interface DebateState {
   // 当前锦标赛
@@ -11,18 +11,24 @@ interface DebateState {
   // Provider 配置
   providers: ProviderConfig[];
   
+  // 参与者（辩手）配置
+  participants: AIAgent[];
+  
   // 加载状态
   isLoading: boolean;
   
   // Actions
   createTournament: (topic: string, description: string, participants: AIAgent[], maxDebateRounds?: number) => Promise<void>;
+  chooseStances: (topic: string, providers: ProviderConfig[]) => Promise<void>;
   startTournament: () => void;
   addMessage: (roundId: string, message: DebateMessage) => void;
   updateCurrentMessage: (roundId: string, content: string) => void;
   setCurrentSpeaker: (roundId: string, speakerId: string | null) => void;
+  setRoundStatus: (roundId: string, status: DebateRound['status']) => void;
   completeDebate: (roundId: string, votes: Vote[]) => void;
   advanceToNextMatch: () => void;
   resetTournament: () => void;
+  deleteTournament: () => Promise<void>;
   addToHistory: (tournament: Tournament) => Promise<void>;
   clearHistory: () => Promise<void>;
   
@@ -32,6 +38,11 @@ interface DebateState {
   updateProvider: (id: string, updates: Partial<ProviderConfig>) => Promise<void>;
   removeProvider: (id: string) => Promise<void>;
   setProviders: (providers: ProviderConfig[]) => void;
+  
+  // Participant Actions
+  loadParticipants: () => Promise<void>;
+  setParticipants: (participants: AIAgent[]) => Promise<void>;
+  clearParticipants: () => Promise<void>;
   
   // 数据加载
   loadTournament: () => Promise<void>;
@@ -73,36 +84,49 @@ export const defaultProviders: ProviderConfig[] = [
 ];
 
 // 创建辩论轮次
-function createDebateRounds(participants: AIAgent[], topic: string): DebateRound[] {
+function createDebateRounds(participants: AIAgent[], topic: string, allParticipants?: AIAgent[]): { rounds: DebateRound[]; byeParticipant: AIAgent | null } {
   const rounds: DebateRound[] = [];
   let roundNumber = 1;
   let currentParticipants = [...participants];
-  
-  // 打乱参与者顺序
+  const totalParticipants = allParticipants || participants;
+
   currentParticipants.sort(() => Math.random() - 0.5);
-  
+
   while (currentParticipants.length > 1) {
+    const debaterA = currentParticipants[0];
+    const debaterB = currentParticipants[1];
+    
+    let judges = totalParticipants.filter(p => p.id !== debaterA.id && p.id !== debaterB.id);
+    
+    if (judges.length % 2 === 0 && judges.length > 0) {
+      const excludeIndex = Math.floor(Math.random() * judges.length);
+      judges = judges.filter((_, i) => i !== excludeIndex);
+    }
+    
     const round: DebateRound = {
       id: generateId(),
       roundNumber,
       topic,
-      debaterA: currentParticipants[0],
-      debaterB: currentParticipants[1],
+      debaterA,
+      debaterB,
       messages: [],
-      judges: currentParticipants.slice(2),
+      judges,
       votes: [],
       winner: null,
       status: 'pending',
       currentSpeaker: null,
       currentMessage: ''
     };
-    
+
     rounds.push(round);
     currentParticipants = currentParticipants.slice(2);
     roundNumber++;
   }
-  
-  return rounds;
+
+  return {
+    rounds,
+    byeParticipant: currentParticipants.length === 1 ? currentParticipants[0] : null
+  };
 }
 
 export const useDebateStore = create<DebateState>()(
@@ -110,6 +134,7 @@ export const useDebateStore = create<DebateState>()(
     tournament: null,
     history: [],
     providers: defaultProviders,
+    participants: [],
     isLoading: false,
 
     // 加载 Providers
@@ -137,7 +162,7 @@ export const useDebateStore = create<DebateState>()(
     },
 
     createTournament: async (topic, description, participants, maxDebateRounds = 3) => {
-      const rounds = createDebateRounds(participants, topic);
+      const { rounds, byeParticipant } = createDebateRounds(participants, topic, participants);
       const tournament: Tournament = {
         id: generateId(),
         topic,
@@ -147,6 +172,7 @@ export const useDebateStore = create<DebateState>()(
         currentRoundIndex: 0,
         currentMatchIndex: 0,
         winners: [],
+        byeParticipant,
         champion: null,
         status: 'configuring',
         createdAt: Date.now(),
@@ -165,6 +191,75 @@ export const useDebateStore = create<DebateState>()(
       }
       
       set({ tournament });
+    },
+
+    chooseStances: async (topic, providers) => {
+      const { tournament } = get();
+      if (!tournament) return;
+
+      set({
+        tournament: {
+          ...tournament,
+          status: 'choosing_stance'
+        }
+      });
+
+      const stanceChoices: Array<{
+        agentId: string;
+        agentName: string;
+        stance: 'for' | 'against';
+        reason: string;
+      }> = [];
+
+      for (const participant of tournament.participants) {
+        try {
+          const provider = providers.find(p => p.id === participant.providerId);
+          const response = await fetch('/api/debate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'choose_stance',
+              agent: participant,
+              topic,
+              provider
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            stanceChoices.push({
+              agentId: participant.id,
+              agentName: participant.name,
+              stance: data.stance,
+              reason: data.reason
+            });
+          }
+        } catch (error) {
+          console.error('Choose stance error:', error);
+          stanceChoices.push({
+            agentId: participant.id,
+            agentName: participant.name,
+            stance: Math.random() > 0.5 ? 'for' : 'against',
+            reason: '选择阵营时出现错误，随机分配立场'
+          });
+        }
+      }
+
+      const updatedParticipants = tournament.participants.map(p => {
+        const choice = stanceChoices.find(c => c.agentId === p.id);
+        return choice ? { ...p, stance: choice.stance } : p;
+      });
+
+      const { rounds: newRounds } = createDebateRounds(updatedParticipants, topic, updatedParticipants);
+
+      set(state => ({
+        tournament: state.tournament ? {
+          ...state.tournament,
+          participants: updatedParticipants,
+          rounds: newRounds,
+          stanceChoices
+        } : null
+      }));
     },
 
     startTournament: () => {
@@ -217,6 +312,18 @@ export const useDebateStore = create<DebateState>()(
       });
     },
 
+    setRoundStatus: (roundId, status) => {
+      set(state => {
+        if (!state.tournament) return state;
+        const rounds = state.tournament.rounds.map(r =>
+          r.id === roundId ? { ...r, status } : r
+        );
+        return {
+          tournament: { ...state.tournament, rounds }
+        };
+      });
+    },
+
     completeDebate: (roundId, votes) => {
       set(state => {
         if (!state.tournament) return state;
@@ -235,7 +342,10 @@ export const useDebateStore = create<DebateState>()(
             : r
         );
         
-        const newWinners = [...state.tournament.winners, winner];
+        const existingWinners = state.tournament.winners;
+        const newWinners = existingWinners.some(w => w.id === winner.id) 
+          ? existingWinners 
+          : [...existingWinners, winner];
         
         return {
           tournament: {
@@ -250,12 +360,12 @@ export const useDebateStore = create<DebateState>()(
     advanceToNextMatch: () => {
       set(state => {
         if (!state.tournament) return state;
-        
-        const { rounds, currentRoundIndex, winners, participants } = state.tournament;
-        
+
+        const { rounds, currentRoundIndex, winners, byeParticipant } = state.tournament;
+
         // 检查是否还有未完成的比赛
         const remainingMatches = rounds.slice(currentRoundIndex + 1);
-        
+
         if (remainingMatches.length > 0) {
           // 继续下一场比赛
           return {
@@ -265,33 +375,50 @@ export const useDebateStore = create<DebateState>()(
             }
           };
         }
-        
-        // 当前轮次结束，检查是否决出冠军
-        if (winners.length === 1) {
+
+        // 当前轮次结束，合并 bye 参与者到晋级名单
+        const allAdvancing = byeParticipant ? [...winners, byeParticipant] : [...winners];
+
+        // 检查是否决出冠军
+        if (allAdvancing.length === 1) {
           return {
             tournament: {
               ...state.tournament,
-              champion: winners[0],
+              champion: allAdvancing[0],
               status: 'completed'
             }
           };
         }
-        
+
         // 创建下一轮
-        const nextRoundRounds = createDebateRounds(winners, state.tournament.topic);
-        
+        const { rounds: nextRoundRounds, byeParticipant: nextBye } = createDebateRounds(allAdvancing, state.tournament.topic, state.tournament.participants);
+
         return {
           tournament: {
             ...state.tournament,
             rounds: [...rounds, ...nextRoundRounds],
             currentRoundIndex: currentRoundIndex + 1,
-            winners: []
+            winners: [],
+            byeParticipant: nextBye
           }
         };
       });
     },
 
     resetTournament: () => {
+      set({ tournament: null });
+    },
+
+    deleteTournament: async () => {
+      try {
+        await fetch('/api/db/tournament', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+      } catch (error) {
+        console.error('Delete tournament error:', error);
+      }
       set({ tournament: null });
     },
 
@@ -368,8 +495,56 @@ export const useDebateStore = create<DebateState>()(
       }
     },
 
-    setProviders: (providers) => {
+    setProviders: async (providers) => {
       set({ providers });
+      try {
+        await fetch('/api/db/providers', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ providers })
+        });
+      } catch (error) {
+        console.error('Save providers error:', error);
+      }
+    },
+    
+    // Participant Actions
+    loadParticipants: async () => {
+      try {
+        const response = await fetch('/api/db/participants');
+        if (response.ok) {
+          const { participants } = await response.json();
+          if (participants) {
+            set({ participants });
+          }
+        }
+      } catch (error) {
+        console.error('Load participants error:', error);
+      }
+    },
+    
+    setParticipants: async (participants) => {
+      set({ participants });
+      try {
+        await fetch('/api/db/participants', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participants })
+        });
+      } catch (error) {
+        console.error('Save participants error:', error);
+      }
+    },
+    
+    clearParticipants: async () => {
+      set({ participants: [] });
+      try {
+        await fetch('/api/db/participants', {
+          method: 'DELETE'
+        });
+      } catch (error) {
+        console.error('Clear participants error:', error);
+      }
     },
     
     // 加载当前锦标赛

@@ -31,6 +31,7 @@ model Tournament {
   currentRoundIndex Int @default(0)
   currentMatchIndex Int @default(0)
   winners     String   // JSON: AIAgent[]
+  byeParticipant String? // JSON: AIAgent | null
   champion    String?  // JSON: AIAgent | null
   status      String   // 'configuring' | 'ongoing' | 'completed'
   createdAt   DateTime @default(now())
@@ -54,4 +55,19 @@ model TournamentHistory {
 
   @@map("tournament_history")
   @@index([createdAt])
+}
+
+// 辩手配置
+model Participant {
+  id          String   @id
+  name        String
+  avatar      String
+  providerId  String
+  modelId     String
+  persona     String
+  systemPrompt String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("participants")
 }

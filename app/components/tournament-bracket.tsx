@@ -13,22 +13,16 @@ interface TournamentBracketProps {
 }
 
 export function TournamentBracket({ tournament }: TournamentBracketProps) {
-  // 按轮次分组
   const roundsByLevel: DebateRound[][] = [];
-  const participantCount = tournament.participants.length;
-  let currentLevel = 0;
-  let matchesInLevel = Math.ceil(participantCount / 2);
   let processedMatches = 0;
+  let matchesInLevel = Math.floor(tournament.participants.length / 2);
 
   while (processedMatches < tournament.rounds.length) {
-    const levelRounds = tournament.rounds.slice(
-      processedMatches,
-      processedMatches + matchesInLevel
-    );
-    roundsByLevel.push(levelRounds);
-    processedMatches += matchesInLevel;
+    const count = Math.min(matchesInLevel, tournament.rounds.length - processedMatches);
+    if (count <= 0) break;
+    roundsByLevel.push(tournament.rounds.slice(processedMatches, processedMatches + count));
+    processedMatches += count;
     matchesInLevel = Math.ceil(matchesInLevel / 2);
-    currentLevel++;
   }
 
   const getRoundName = (level: number, totalLevels: number) => {

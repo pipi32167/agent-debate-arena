@@ -66,7 +66,34 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const prisma = createPrisma();
   try {
-    const { id, ...updates } = await req.json();
+    const body = await req.json();
+    
+    if (body.providers && Array.isArray(body.providers)) {
+      await prisma.provider.deleteMany();
+      for (const p of body.providers) {
+        await prisma.provider.upsert({
+          where: { id: p.id },
+          update: {
+            name: p.name,
+            baseURL: p.baseURL,
+            apiKey: p.apiKey || '',
+            models: JSON.stringify(p.models || []),
+            isBuiltIn: p.isBuiltIn || false,
+          },
+          create: {
+            id: p.id,
+            name: p.name,
+            baseURL: p.baseURL,
+            apiKey: p.apiKey || '',
+            models: JSON.stringify(p.models || []),
+            isBuiltIn: p.isBuiltIn || false,
+          }
+        });
+      }
+      return Response.json({ success: true });
+    }
+    
+    const { id, ...updates } = body;
     
     const updateData: any = {};
     if (updates.name) updateData.name = updates.name;
