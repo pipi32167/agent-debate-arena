@@ -1,0 +1,57 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Provider 配置
+model Provider {
+  id        String   @id @default(cuid())
+  name      String
+  baseURL   String
+  apiKey    String   // 加密存储
+  models    String   // JSON: ProviderModel[]
+  isBuiltIn Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("providers")
+}
+
+// 锦标赛
+model Tournament {
+  id          String   @id @default(cuid())
+  topic       String
+  description String?
+  participants String  // JSON: AIAgent[]
+  rounds      String   // JSON: DebateRound[]
+  currentRoundIndex Int @default(0)
+  currentMatchIndex Int @default(0)
+  winners     String   // JSON: AIAgent[]
+  champion    String?  // JSON: AIAgent | null
+  status      String   // 'configuring' | 'ongoing' | 'completed'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  maxDebateRounds Int @default(3)
+
+  @@map("tournaments")
+}
+
+// 辩论历史（已完成的锦标赛）
+model TournamentHistory {
+  id          String   @id @default(cuid())
+  tournamentId String
+  topic       String
+  description String?
+  participants String  // JSON: AIAgent[]
+  rounds      String   // JSON: DebateRound[]
+  champion    String   // JSON: AIAgent
+  createdAt   DateTime @default(now())
+  completedAt DateTime @default(now())
+
+  @@map("tournament_history")
+  @@index([createdAt])
+}
