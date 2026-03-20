@@ -15,16 +15,18 @@ import {
   XCircle, 
   Trophy,
   Sparkles,
-  Loader2
+  Loader2,
+  MessageCircle
 } from 'lucide-react';
 
 interface VotingPanelProps {
   round: DebateRound;
   isVoting: boolean;
   onStartVoting: () => void;
+  hideStartButton?: boolean;
 }
 
-export function VotingPanel({ round, isVoting, onStartVoting }: VotingPanelProps) {
+export function VotingPanel({ round, isVoting, onStartVoting, hideStartButton }: VotingPanelProps) {
   const [showResults, setShowResults] = useState(false);
 
   const voteCountA = round.votes.filter(v => v.votedForId === round.debaterA.id).length;
@@ -57,8 +59,29 @@ export function VotingPanel({ round, isVoting, onStartVoting }: VotingPanelProps
       </CardHeader>
 
       <CardContent className="space-y-6">
+        {round.messages.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <MessageCircle className="h-4 w-4" />
+              <span>辩论摘要</span>
+            </div>
+            <ScrollArea className="h-[150px] border rounded-lg p-3">
+              <div className="space-y-2">
+                {round.messages.slice(-6).map((message) => (
+                  <div key={message.id} className="text-sm">
+                    <span className="font-medium">{message.speakerName}:</span>
+                    <span className="text-muted-foreground ml-1">
+                      {message.content.slice(0, 100)}{message.content.length > 100 ? '...' : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+
         {/* 投票按钮 */}
-        {round.status === 'ongoing' && !isVoting && (
+        {round.status === 'ongoing' && !isVoting && !hideStartButton && (
           <div className="text-center py-8">
             <p className="text-muted-foreground mb-4">辩论已结束，准备开始评委投票</p>
             <Button onClick={onStartVoting} size="lg">

@@ -30,13 +30,19 @@ interface DebateArenaProps {
 
 export function DebateArena({ round, isActive, onStart, onPause, onComplete }: DebateArenaProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [currentMessageType, setCurrentMessageType] = useState<string>('');
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [round.messages, round.currentMessage]);
+    const scrollToBottom = () => {
+      if (scrollRef.current) {
+        const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+        if (viewport) {
+          viewport.scrollTop = viewport.scrollHeight;
+        }
+      }
+    };
+    
+    requestAnimationFrame(scrollToBottom);
+  }, [round.messages.length, round.currentMessage]);
 
   const getMessageTypeLabel = (type: DebateMessage['type']) => {
     const labels: Record<DebateMessage['type'], string> = {

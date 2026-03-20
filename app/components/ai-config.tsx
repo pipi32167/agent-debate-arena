@@ -14,7 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, User, Bot, Settings, Server } from 'lucide-react';
+import { Plus, Trash2, User, Bot, Settings, Server, Check, Search } from 'lucide-react';
 
 interface AIConfigProps {
   participants: AIAgent[];
@@ -25,8 +25,23 @@ interface AIConfigProps {
 export function AIConfig({ participants, providers, onParticipantsChange }: AIConfigProps) {
   const [editingAgent, setEditingAgent] = useState<AIAgent | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [presetSearch, setPresetSearch] = useState('');
+  const [modelSearch, setModelSearch] = useState('');
 
   const generateId = () => Math.random().toString(36).substring(2, 15);
+
+  const isPresetAdded = (presetId: string) => {
+    return participants.some(p => p.id.startsWith(presetId) || p.persona === presetPersonas.find(pp => pp.id === presetId)?.persona);
+  };
+
+  const filteredPresets = useMemo(() => {
+    if (!presetSearch) return presetPersonas;
+    const search = presetSearch.toLowerCase();
+    return presetPersonas.filter(p => 
+      p.name.toLowerCase().includes(search) || 
+      p.persona.toLowerCase().includes(search)
+    );
+  }, [presetSearch]);
 
   // 获取默认 provider 和 model
   const getDefaultProviderAndModel = () => {
@@ -39,9 +54,11 @@ export function AIConfig({ participants, providers, onParticipantsChange }: AICo
   };
 
   const handleAddPreset = (preset: PresetPersona) => {
+    if (isPresetAdded(preset.id)) return;
+    
     const { providerId, modelId } = getDefaultProviderAndModel();
     const newAgent: AIAgent = {
-      id: generateId(),
+      id: `${preset.id}-${generateId()}`,
       name: preset.name,
       avatar: preset.avatar,
       providerId,
@@ -91,6 +108,22 @@ export function AIConfig({ participants, providers, onParticipantsChange }: AICo
     setIsDialogOpen(true);
   };
 
+  const handleEditPreset = (preset: PresetPersona) => {
+    const { providerId, modelId } = getDefaultProviderAndModel();
+    const newAgent: AIAgent = {
+      id: `${preset.id}-${generateId()}`,
+      name: preset.name,
+      avatar: preset.avatar,
+      providerId,
+      modelId,
+      persona: preset.persona,
+      systemPrompt: preset.systemPrompt,
+      stance: 'for'
+    };
+    setEditingAgent(newAgent);
+    setIsDialogOpen(true);
+  };
+
   // 获取当前编辑 agent 对应的 provider
   const currentProvider = useMemo(() => {
     if (!editingAgent) return null;
@@ -133,32 +166,65 @@ export function AIConfig({ participants, providers, onParticipantsChange }: AICo
           </TabsList>
 
           <TabsContent value="presets" className="mt-4">
-            <ScrollArea className="h-[400px] pr-4">
-              <div className="grid grid-cols-1 gap-3">
-                {presetPersonas.map((preset) => (
-                  <Card
-                    key={preset.id}
-                    className="cursor-pointer transition-colors hover:bg-muted/50"
-                    onClick={() => handleAddPreset(preset)}
-                  >
-                    <CardContent className="flex items-center gap-4 p-4">
-                      <Avatar className="h-12 w-12 text-2xl">
-                        <AvatarFallback>{preset.avatar}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold truncate">{preset.name}</h4>
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {preset.persona}
-                        </p>
-                      </div>
-                      <Button size="sm" variant="ghost">
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="搜索预设角色..."
+                  value={presetSearch}
+                  onChange={(e) => setPresetSearch(e.target.value)}
+                  className="pl-9"
+                />
               </div>
-            </ScrollArea>
+              <ScrollArea className="h-[500px] pr-4">
+                <div className="grid grid-cols-1 gap-3">
+                  {filteredPresets.map((preset) => {
+                    const isAdded = isPresetAdded(preset.id);
+                    return (
+                      <Card
+                        key={preset.id}
+                        className={`transition-colors ${isAdded ? 'opacity-50' : 'hover:bg-muted/50'}`}
+                      >
+                        <CardContent className="flex items-center gap-4 p-4">
+                          <Avatar className="h-12 w-12 text-2xl">
+                            <AvatarFallback>{preset.avatar}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold truncate">{preset.name}</h4>
+                            <p className="text-sm text-muted-foreground line-clamp-2">
+                              {preset.persona}
+                            </p>
+                          </div>
+                          {isAdded ? (
+                            <Badge variant="secondary" className="shrink-0">
+                              <Check className="h-3 w-3 mr-1" />
+                              已加入
+                            </Badge>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => handleEditPreset(preset)}
+                              >
+                                <Settings className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => handleAddPreset(preset)}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            </div>
           </TabsContent>
 
           <TabsContent value="custom" className="mt-4">
@@ -176,7 +242,7 @@ export function AIConfig({ participants, providers, onParticipantsChange }: AICo
                 </Button>
               </div>
 
-              <ScrollArea className="h-[350px] pr-4">
+              <ScrollArea className="h-[500px] pr-4">
                 <div className="space-y-3">
                   {participants.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
@@ -205,7 +271,7 @@ export function AIConfig({ participants, providers, onParticipantsChange }: AICo
                               {agent.persona.slice(0, 30)}...
                             </p>
                           </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center gap-1">
                             <Button
                               size="sm"
                               variant="ghost"
@@ -290,31 +356,49 @@ export function AIConfig({ participants, providers, onParticipantsChange }: AICo
                   </select>
                 </div>
 
-                {/* Model 选择 */}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">模型</Label>
-                  <select
-                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                    value={editingAgent.modelId}
-                    onChange={(e) =>
-                      setEditingAgent({ ...editingAgent, modelId: e.target.value })
-                    }
-                    disabled={availableModels.length === 0}
-                  >
-                    {availableModels.length === 0 ? (
-                      <option value="">该 Provider 没有可用模型</option>
-                    ) : (
-                      availableModels.map(model => (
-                        <option key={model.id} value={model.id}>
-                          {model.name}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  {availableModels.length === 0 && currentProvider && (
-                    <p className="text-xs text-muted-foreground">
-                      请先在 Provider 配置中获取并启用模型
+                  {availableModels.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-2">
+                      {currentProvider ? '请先在 Provider 配置中获取并启用模型' : '该 Provider 没有可用模型'}
                     </p>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="筛选模型..."
+                          value={modelSearch}
+                          onChange={(e) => setModelSearch(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                      <ScrollArea className="h-[150px] border rounded-lg p-2">
+                        <div className="space-y-1">
+                          {availableModels
+                            .filter(m => !modelSearch || m.name.toLowerCase().includes(modelSearch.toLowerCase()) || m.id.toLowerCase().includes(modelSearch.toLowerCase()))
+                            .map(model => (
+                              <div
+                                key={model.id}
+                                className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
+                                  editingAgent.modelId === model.id ? 'bg-primary/10 border border-primary' : 'hover:bg-muted'
+                                }`}
+                                onClick={() => setEditingAgent({ ...editingAgent, modelId: model.id })}
+                              >
+                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                  editingAgent.modelId === model.id ? 'border-primary' : 'border-muted-foreground'
+                                }`}>
+                                  {editingAgent.modelId === model.id && (
+                                    <div className="w-2 h-2 rounded-full bg-primary" />
+                                  )}
+                                </div>
+                                <span className="text-sm flex-1 truncate">{model.name}</span>
+                                <span className="text-xs text-muted-foreground truncate">{model.id}</span>
+                              </div>
+                            ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
                   )}
                 </div>
 

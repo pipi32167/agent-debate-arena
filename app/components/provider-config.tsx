@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ProviderConfig, ProviderModel } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,7 +21,8 @@ import {
   AlertCircle,
   Key,
   Globe,
-  Cpu
+  Cpu,
+  Search
 } from 'lucide-react';
 
 interface ProviderConfigPanelProps {
@@ -34,6 +35,16 @@ export function ProviderConfigPanel({ providers, onProvidersChange }: ProviderCo
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [modelSearch, setModelSearch] = useState('');
+
+  const filteredModels = useMemo(() => {
+    if (!editingProvider || !modelSearch) return editingProvider?.models || [];
+    const search = modelSearch.toLowerCase();
+    return editingProvider.models.filter(m => 
+      m.name.toLowerCase().includes(search) || 
+      m.id.toLowerCase().includes(search)
+    );
+  }, [editingProvider, modelSearch]);
 
   const generateId = () => Math.random().toString(36).substring(2, 15);
 
@@ -184,15 +195,13 @@ export function ProviderConfigPanel({ providers, onProvidersChange }: ProviderCo
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                {!provider.isBuiltIn && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleEditProvider(provider)}
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleEditProvider(provider)}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
                 {!provider.isBuiltIn && (
                   <Button
                     size="sm"
@@ -222,7 +231,7 @@ export function ProviderConfigPanel({ providers, onProvidersChange }: ProviderCo
 
         {/* Provider 编辑对话框 */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogContent className="w-[80vw] max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
             <DialogHeader>
               <DialogTitle>
                 {providers.find(p => p.id === editingProvider?.id) ? '编辑' : '添加'} Provider
@@ -231,37 +240,41 @@ export function ProviderConfigPanel({ providers, onProvidersChange }: ProviderCo
             
             {editingProvider && (
               <div className="space-y-4 pt-4">
-                {/* 名称 */}
-                <div className="space-y-2">
-                  <Label htmlFor="provider-name">显示名称</Label>
-                  <Input
-                    id="provider-name"
-                    placeholder="如：OpenRouter, SiliconFlow"
-                    value={editingProvider.name}
-                    onChange={(e) =>
-                      setEditingProvider({ ...editingProvider, name: e.target.value })
-                    }
-                  />
-                </div>
+                {!editingProvider.isBuiltIn && (
+                  <>
+                    {/* 名称 */}
+                    <div className="space-y-2">
+                      <Label htmlFor="provider-name">显示名称</Label>
+                      <Input
+                        id="provider-name"
+                        placeholder="如：OpenRouter, SiliconFlow"
+                        value={editingProvider.name}
+                        onChange={(e) =>
+                          setEditingProvider({ ...editingProvider, name: e.target.value })
+                        }
+                      />
+                    </div>
 
-                {/* Base URL */}
-                <div className="space-y-2">
-                  <Label htmlFor="provider-baseurl" className="flex items-center gap-2">
-                    <Globe className="h-4 w-4" />
-                    Base URL
-                  </Label>
-                  <Input
-                    id="provider-baseurl"
-                    placeholder="https://api.openai.com/v1"
-                    value={editingProvider.baseURL}
-                    onChange={(e) =>
-                      setEditingProvider({ ...editingProvider, baseURL: e.target.value })
-                    }
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    OpenAI 兼容格式的 API 基础地址，需包含 /v1 路径
-                  </p>
-                </div>
+                    {/* Base URL */}
+                    <div className="space-y-2">
+                      <Label htmlFor="provider-baseurl" className="flex items-center gap-2">
+                        <Globe className="h-4 w-4" />
+                        Base URL
+                      </Label>
+                      <Input
+                        id="provider-baseurl"
+                        placeholder="https://api.openai.com/v1"
+                        value={editingProvider.baseURL}
+                        onChange={(e) =>
+                          setEditingProvider({ ...editingProvider, baseURL: e.target.value })
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        OpenAI 兼容格式的 API 基础地址，需包含 /v1 路径
+                      </p>
+                    </div>
+                  </>
+                )}
 
                 {/* API Key */}
                 <div className="space-y-2">
@@ -278,26 +291,33 @@ export function ProviderConfigPanel({ providers, onProvidersChange }: ProviderCo
                       setEditingProvider({ ...editingProvider, apiKey: e.target.value })
                     }
                   />
+                  {editingProvider.isBuiltIn && (
+                    <p className="text-xs text-muted-foreground">
+                      留空则使用环境变量中的 API Key
+                    </p>
+                  )}
                 </div>
 
                 <Separator />
 
                 {/* 获取模型按钮 */}
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleFetchModels}
-                    disabled={isFetching}
-                    variant="secondary"
-                    className="flex-1"
-                  >
-                    {isFetching ? (
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                    )}
-                    {isFetching ? '获取中...' : '获取模型列表'}
-                  </Button>
-                </div>
+                {!editingProvider.isBuiltIn && (
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleFetchModels}
+                      disabled={isFetching}
+                      variant="secondary"
+                      className="flex-1"
+                    >
+                      {isFetching ? (
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                      )}
+                      {isFetching ? '获取中...' : '获取模型列表'}
+                    </Button>
+                  </div>
+                )}
 
                 {/* 错误提示 */}
                 {fetchError && (
@@ -311,14 +331,39 @@ export function ProviderConfigPanel({ providers, onProvidersChange }: ProviderCo
                 {editingProvider.models.length > 0 && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label>可用模型</Label>
+                      <div className="flex items-center gap-2">
+                        <Label>可用模型</Label>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => {
+                            const allEnabled = editingProvider.models.every(m => m.enabled);
+                            setEditingProvider({
+                              ...editingProvider,
+                              models: editingProvider.models.map(m => ({ ...m, enabled: !allEnabled }))
+                            });
+                          }}
+                        >
+                          {editingProvider.models.every(m => m.enabled) ? '全不选' : '全选'}
+                        </Button>
+                      </div>
                       <span className="text-xs text-muted-foreground">
                         {editingProvider.models.filter(m => m.enabled).length} / {editingProvider.models.length} 已启用
                       </span>
                     </div>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="筛选模型..."
+                        value={modelSearch}
+                        onChange={(e) => setModelSearch(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
                     <ScrollArea className="h-[200px] border rounded-lg p-2">
                       <div className="space-y-1">
-                        {editingProvider.models.map((model) => (
+                        {filteredModels.map((model) => (
                           <div
                             key={model.id}
                             className="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer"
@@ -328,10 +373,10 @@ export function ProviderConfigPanel({ providers, onProvidersChange }: ProviderCo
                               checked={model.enabled}
                               onCheckedChange={() => handleToggleModel(model.id)}
                             />
-                            <span className="text-sm flex-1 truncate">{model.name}</span>
-                            {model.enabled && (
-                              <Check className="h-4 w-4 text-green-500" />
-                            )}
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm truncate block">{model.name}</span>
+                              <span className="text-xs text-muted-foreground truncate block">{model.id}</span>
+                            </div>
                           </div>
                         ))}
                       </div>
